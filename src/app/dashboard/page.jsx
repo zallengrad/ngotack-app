@@ -1,6 +1,5 @@
 import Link from "next/link";
 import Image from "next/image";
-import { FiUser } from "react-icons/fi";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import ExplorePrompt from "@/components/ExplorePrompt";
@@ -23,6 +22,7 @@ export default function DashboardPage() {
     <div className="min-h-screen flex flex-col bg-white text-gray-900">
       <Header
         containerClassName={container}
+        profileMenu={{ menuItems: [{ label: "Logout", href: "/auth/login" }] }}
         rightContent={
           <nav className="flex items-center gap-3">
             {navLinks.map((item) => (
@@ -36,11 +36,6 @@ export default function DashboardPage() {
                 </a>
               </Link>
             ))}
-            <Link href="/dashboard/profile" legacyBehavior>
-              <a className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:shadow-md transition duration-150 ease-in-out">
-                <FiUser className="text-lg" />
-              </a>
-            </Link>
           </nav>
         }
       />
