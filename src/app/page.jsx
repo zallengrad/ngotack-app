@@ -2,24 +2,24 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Playfair_Display, Quicksand, Montserrat } from "next/font/google";
+import { Playfair_Display, Quicksand } from "next/font/google";
+import Footer from "@/components/Footer";
 
 const playfair = Playfair_Display({ subsets: ["latin"], weight: ["600", "700", "800"], display: "swap" });
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
-const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
 
 const Navbar = () => {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-gray-200 bg-white">
-      <div className="max-w-12xl mx-auto px-6 lg:px-10 py-4 flex justify-between items-center">
+      <div className="max-w-6xl mx-auto px-6 lg:px-10 py-4 flex justify-between items-center">
         <div className="flex items-center space-x-2">
           <Image src="/assets/logo.png" alt="NGOTACK Logo" width={120} height={40} className="h-12 w-auto object-contain" priority />
         </div>
         <nav className="space-x-3 flex items-center">
-          <Link href="/login" legacyBehavior>
+          <Link href="/auth/login" legacyBehavior>
             <a className={`${quicksand.className} px-7 py-2.5 border border-gray-200 text-gray-800 rounded-lg shadow-sm hover:shadow-md transition duration-150 ease-in-out`}>Login</a>
           </Link>
-          <Link href="/signup" legacyBehavior>
+          <Link href="/auth/signup" legacyBehavior>
             <a className={`${quicksand.className} px-7 py-2.5 bg-[#36D7B7] text-black rounded-lg shadow-sm hover:shadow-md hover:brightness-95 transition duration-150 ease-in-out`}>Sign Up</a>
           </Link>
         </nav>
@@ -30,7 +30,7 @@ const Navbar = () => {
 
 const HeroSection = () => {
   return (
-    <main className="max-w-8xl mx-auto px-6 lg:px-10 py-16 md:py-20">
+    <main className="max-w-6xl mx-auto px-6 lg:px-10 py-16 md:py-20">
       <div className="grid md:grid-cols-2 gap-12 items-center">
         <div className="flex flex-col gap-6">
           <h1 className={`${playfair.className} text-4xl md:text-5xl font-bold text-gray-900 leading-tight`}>
@@ -48,29 +48,6 @@ const HeroSection = () => {
         </div>
       </div>
     </main>
-  );
-};
-
-const Footer = () => {
-  return (
-    <footer className="mt-12">
-      <div className="border-t border-gray-300" />
-      <div className={`${montserrat.className} max-w-12xl mx-auto px-6 lg:px-10 py-4 flex flex-col md:flex-row justify-between items-center text-sm text-gray-700`}>
-        <div className="flex items-center space-x-1 mb-2 md:mb-0">
-          <span>@ NGOTACK</span>
-          <span>|</span>
-          <span>AI Learning Insight</span>
-        </div>
-        <nav className="space-x-6">
-          <Link href="/terms" legacyBehavior>
-            <a className="hover:text-gray-900 transition duration-150">Terms</a>
-          </Link>
-          <Link href="/privacy" legacyBehavior>
-            <a className="hover:text-gray-900 transition duration-150">Privacy</a>
-          </Link>
-        </nav>
-      </div>
-    </footer>
   );
 };
 
