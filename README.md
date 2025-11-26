@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# NGOTACK | AI Learning Insight
 
-## Getting Started
+Landing, authentication, dashboard, and courses UI built with Next.js (App Router) and Tailwind v4 (via `@import "tailwindcss";`). Assets live in `public/assets`.
 
-First, run the development server:
-
+## Quick Start
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# open http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Key Screens
+- Landing: hero with logo and CTA.
+- Auth: `/auth/login`, `/auth/register` (Playfair/Quicksand/Montserrat fonts).
+- Dashboard: welcome banner, explore prompt, progress overview cards, shared header/footer.
+- Courses: `/courses` and `/dashboard/courses` grids with hoverable course cards.
+- 404: custom not-found page using `public/assets/404.png`.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Shared Components
+- `components/Header.jsx` – logo, nav, profile dropdown (logout).
+- `components/Footer.jsx` – shared footer; adjustable container width.
+- `components/ExplorePrompt.jsx` – prompt shown before user explores.
+- `components/ProgressOverview.jsx` – AI insights, activity list, completed classes.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Fonts & Styling
+- Google fonts via `next/font`: Playfair Display, Quicksand, Montserrat.
+- Color accents: green `#36D7B7` (buttons/banners), darker green `#0ba14f` for CTAs.
+- Containers: typically `max-w-[1400px]` with `px-6 lg:px-10`.
 
-## Learn More
+## Assets
+- Logo/hero/course/404 images in `public/assets`. Use leading slashes (e.g., `/assets/hero.png`) with `next/image`.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Notes
+- Profile dropdown is opt-in: pass `profileMenu` to `Header`.
+- Course cards support hover scale and pointer for discoverability.
