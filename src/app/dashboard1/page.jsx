@@ -4,7 +4,6 @@ import { FiUser } from "react-icons/fi";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import ExplorePrompt from "@/components/ExplorePrompt";
-import ProgressOverview from "@/components/ProgressOverview";
 import { Quicksand, Montserrat } from "next/font/google";
 
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
@@ -17,7 +16,6 @@ export default function DashboardPage() {
     { href: "/dashboard/courses", label: "Course", active: false },
     { href: "/dashboard", label: "Dashboard", active: true },
   ];
-  const hasProgress = true; // ganti dengan kondisi nyata saat progress tersedia
 
   return (
     <div className="min-h-screen flex flex-col bg-white text-gray-900">
@@ -52,7 +50,9 @@ export default function DashboardPage() {
           <p className="mt-2 text-base sm:text-lg text-gray-900">Semoga aktifitas belajar mu menyenangkan.</p>
         </div>
 
-        <div className="text-center">{hasProgress ? <ProgressOverview userName={userName} /> : <ExplorePrompt userName={userName} />}</div>
+        <div className="text-center">
+          <ExplorePrompt userName={userName} />
+        </div>
       </main>
 
       <Footer containerClassName={container} />
