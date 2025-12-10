@@ -16,11 +16,11 @@ export default function Footer({ className = "", containerClassName = "max-w-6xl
           <span>AI Learning Insight</span>
         </div>
         <nav className="space-x-6">
-          <Link href="/terms" legacyBehavior>
-            <a className="hover:text-gray-900 transition duration-150">Terms</a>
+          <Link href="/terms" className="hover:text-gray-900 transition duration-150">
+            Terms
           </Link>
-          <Link href="/privacy" legacyBehavior>
-            <a className="hover:text-gray-900 transition duration-150">Privacy</a>
+          <Link href="/privacy" className="hover:text-gray-900 transition duration-150">
+            Privacy
           </Link>
         </nav>
       </div>

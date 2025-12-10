@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { FiUser, FiLogOut } from "react-icons/fi";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Header({ rightContent, containerClassName = "max-w-6xl", className = "", profileMenu }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -31,10 +33,13 @@ export default function Header({ rightContent, containerClassName = "max-w-6xl",
         },
       ]);
 
+  // Logo redirects to dashboard if logged in, otherwise to landing page
+  const logoHref = user ? "/dashboard" : "/";
+
   return (
     <header className={`border-b border-gray-200 bg-white ${className}`}>
       <div className={`${containerClassName} mx-auto px-6 lg:px-10 py-4 flex justify-between items-center`}>
-        <Link href="/" className="flex items-center space-x-2">
+        <Link href={logoHref} className="flex items-center space-x-2">
           <Image src="/assets/logo.png" alt="NGOTACK Logo" width={120} height={40} className="h-12 w-auto object-contain" priority />
         </Link>
         <div className="flex items-center gap-4">

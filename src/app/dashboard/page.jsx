@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import Footer from "@/components/Footer";
@@ -5,12 +7,14 @@ import Header from "@/components/Header";
 import ExplorePrompt from "@/components/ExplorePrompt";
 import ProgressOverview from "@/components/ProgressOverview";
 import { Quicksand, Montserrat } from "next/font/google";
+import { useAuth } from "@/contexts/AuthContext";
 
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
 
 export default function DashboardPage() {
-  const userName = "Udin";
+  const { user } = useAuth();
+  const userName = user?.username || "User";
   const container = "max-w-[1400px]";
   const navLinks = [
     { href: "/dashboard/courses", label: "Course", active: false },

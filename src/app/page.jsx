@@ -16,11 +16,11 @@ const Navbar = () => {
           <Image src="/assets/logo.png" alt="NGOTACK Logo" width={120} height={40} className="h-12 w-auto object-contain" priority />
         </div>
         <nav className="space-x-3 flex items-center">
-          <Link href="/auth/login" legacyBehavior>
-            <a className={`${quicksand.className} px-7 py-2.5 border border-gray-200 text-gray-800 rounded-lg shadow-sm hover:shadow-md transition duration-150 ease-in-out`}>Login</a>
+          <Link href="/auth/login" className={`${quicksand.className} px-7 py-2.5 border border-gray-200 text-gray-800 rounded-lg shadow-sm hover:shadow-md transition duration-150 ease-in-out`}>
+            Login
           </Link>
-          <Link href="/auth/signup" legacyBehavior>
-            <a className={`${quicksand.className} px-7 py-2.5 bg-[#36D7B7] text-black rounded-lg shadow-sm hover:shadow-md hover:brightness-95 transition duration-150 ease-in-out`}>Sign Up</a>
+          <Link href="/auth/register" className={`${quicksand.className} px-7 py-2.5 bg-[#36D7B7] text-black rounded-lg shadow-sm hover:shadow-md hover:brightness-95 transition duration-150 ease-in-out`}>
+            Sign Up
           </Link>
         </nav>
       </div>
