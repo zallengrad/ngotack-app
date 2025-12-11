@@ -13,7 +13,7 @@ const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], displa
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const userName = user?.username || "User";
   const container = "max-w-[1400px]";
   const navLinks = [
@@ -22,11 +22,21 @@ export default function DashboardPage() {
   ];
   const hasProgress = true; // ganti dengan kondisi nyata saat progress tersedia
 
+  const handleLogout = () => {
+    logout();
+    window.location.href = "/auth/login";
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-white text-gray-900">
       <Header
         containerClassName={container}
-        profileMenu={{ menuItems: [{ label: "Logout", href: "/auth/login" }] }}
+        profileMenu={{ 
+          menuItems: [{ 
+            label: "Logout", 
+            onClick: handleLogout 
+          }] 
+        }}
         rightContent={
           <nav className="flex items-center gap-3">
             {navLinks.map((item) => (

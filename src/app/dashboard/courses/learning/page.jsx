@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Quicksand, Montserrat } from "next/font/google";
-import { FiCheck } from "react-icons/fi";
-import { COURSES, getCourseById } from "@/config/courses";
+import { FiCheck, FiAlertCircle, FiRefreshCw } from "react-icons/fi";
+import { getJourneyDetail, getTutorialContent } from "@/lib/journeys";
+import { trackTutorial, getTrackingSummary, sendHeartbeat } from "@/lib/tracking";
 
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
@@ -42,90 +43,283 @@ export default function LearningPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const courseId = searchParams.get("course") || "frontend-basic";
-  const course = useMemo(() => getCourseById(courseId), [courseId]);
-  const materials = course.materials;
-  const examMaterialId = materials[materials.length - 1].id;
-
-  const paramMaterial = searchParams.get("m");
-  const firstMaterialId = materials[0].id;
-
-  const [activeMaterialId, setActiveMaterialId] = useState(firstMaterialId);
+  const courseId = searchParams.get("course");
+  
+  // State for data
+  const [journey, setJourney] = useState(null);
+  const [tutorials, setTutorials] = useState([]);
+  const [activeTutorial, setActiveTutorial] = useState(null);
+  const [activeTutorialId, setActiveTutorialId] = useState(null);
+  
+  // State for UI
+  const [loadingJourney, setLoadingJourney] = useState(true);
+  const [loadingContent, setLoadingContent] = useState(false);
+  const [error, setError] = useState(null);
   const [completedMaterials, setCompletedMaterials] = useState([]);
+  const [trackedStarts, setTrackedStarts] = useState(new Set()); // Track which tutorials have been marked as "start"
 
-  useEffect(() => {
-    const completed = loadProgress(courseId);
-    setCompletedMaterials(completed);
-
-    const parsed = paramMaterial ? parseInt(paramMaterial, 10) : NaN;
-    if (!Number.isNaN(parsed) && materials.some((m) => m.id === parsed)) {
-      setActiveMaterialId(parsed);
-    } else {
-      setActiveMaterialId(firstMaterialId);
+  // Fetch Journey Details
+  const fetchJourney = useCallback(async () => {
+    if (!courseId) return;
+    
+    setLoadingJourney(true);
+    setError(null);
+    
+    try {
+      const result = await getJourneyDetail(courseId);
+      
+      if (result.success) {
+        console.log("Journey Details Fetched:", result.data);
+        setJourney(result.data);
+        // Handle both 'tutorial' (from API spec) and potentially 'tutorials' property names
+        const tutorialList = result.data.tutorial || result.data.tutorials || [];
+        setTutorials(tutorialList);
+        
+        // Determine initial active tutorial
+        const paramMaterial = searchParams.get("m");
+        const parsedParamId = paramMaterial ? parseInt(paramMaterial, 10) : null;
+        
+        if (parsedParamId && tutorialList.some(t => t.tutorial_id === parsedParamId)) {
+          setActiveTutorialId(parsedParamId);
+        } else if (tutorialList.length > 0) {
+          setActiveTutorialId(tutorialList[0].tutorial_id);
+        }
+      } else {
+        setError(result.error || "Gagal memuat detail kursus");
+      }
+    } catch (err) {
+      console.error("Error fetching journey:", err);
+      setError("Terjadi kesalahan saat memuat data kursus");
+    } finally {
+      setLoadingJourney(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId]);
+  }, [courseId, searchParams]);
 
+  // Fetch Tutorial Content
+  const fetchContent = useCallback(async () => {
+    if (!activeTutorialId) return;
+    
+    setLoadingContent(true);
+    
+    try {
+      const result = await getTutorialContent(activeTutorialId);
+      
+      if (result.success) {
+        console.log("Tutorial Content Fetched:", result.data);
+        setActiveTutorial(result.data);
+      } else {
+        // Fallback if content fetch fails but we have basic info from the list
+        const basicInfo = tutorials.find(t => t.tutorial_id === activeTutorialId);
+        if (basicInfo) {
+          setActiveTutorial({
+            ...basicInfo,
+            content: "Gagal memuat konten lengkap. Silakan coba lagi."
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching tutorial content:", err);
+    } finally {
+      setLoadingContent(false);
+    }
+  }, [activeTutorialId, tutorials]);
+
+  // Load progress from backend
+  const loadProgressFromBackend = useCallback(async () => {
+    try {
+      const result = await getTrackingSummary();
+      if (result.success && result.data) {
+        // Backend returns summary with completed/inProgress counts
+        // We need to get the actual list of completed tutorial IDs
+        // For now, we'll keep localStorage as primary and sync later
+        // TODO: Backend should provide list of completed tutorial IDs
+        console.log('📊 Backend tracking summary:', result.data);
+      }
+    } catch (err) {
+      console.warn('Failed to load progress from backend, using localStorage:', err);
+    }
+  }, []);
+
+  // Initial Load
+  useEffect(() => {
+    if (courseId) {
+      fetchJourney();
+      loadProgressFromBackend();
+      const completed = loadProgress(courseId);
+      setCompletedMaterials(completed);
+    }
+  }, [courseId, fetchJourney, loadProgressFromBackend]);
+
+  // Load Content when active ID changes
+  useEffect(() => {
+    if (activeTutorialId) {
+      fetchContent();
+      
+      // Track "start" if not already tracked
+      if (!trackedStarts.has(activeTutorialId)) {
+        trackTutorial(activeTutorialId, 'start').then(result => {
+          if (result.success) {
+            setTrackedStarts(prev => new Set([...prev, activeTutorialId]));
+          }
+        });
+      }
+      
+      // Update URL without reloading
+      const newUrl = `/dashboard/courses/learning?course=${courseId}&m=${activeTutorialId}`;
+      window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
+    }
+  }, [activeTutorialId, courseId, fetchContent, trackedStarts]);
+
+  // Activity Heartbeat - Send periodic heartbeat while user is active
+  useEffect(() => {
+    if (!activeTutorialId || !courseId) return;
+
+    // Send initial heartbeat
+    sendHeartbeat(parseInt(courseId), activeTutorialId);
+
+    // Set up interval to send heartbeat every 30 seconds
+    const heartbeatInterval = setInterval(() => {
+      sendHeartbeat(parseInt(courseId), activeTutorialId);
+    }, 30000); // 30 seconds
+
+    // Cleanup: stop heartbeat when tutorial changes or component unmounts
+    return () => {
+      clearInterval(heartbeatInterval);
+    };
+  }, [activeTutorialId, courseId]);
+
+  // Derived state
   const completedSet = new Set(completedMaterials);
-  const activeIndex = materials.findIndex((m) => m.id === activeMaterialId);
-
+  const activeIndex = tutorials.findIndex((t) => t.tutorial_id === activeTutorialId);
+  
+  // Calculate progress
+  // Note: This logic might need to be updated if backend provides progress
   let highestCompletedIndex = -1;
-  materials.forEach((m, idx) => {
-    if (completedSet.has(m.id) && idx > highestCompletedIndex) {
+  tutorials.forEach((t, idx) => {
+    if (completedSet.has(t.tutorial_id) && idx > highestCompletedIndex) {
       highestCompletedIndex = idx;
     }
   });
 
-  const activeMaterial =
-    materials.find((m) => m.id === activeMaterialId) || materials[0];
-
-  const progress = Math.round((completedSet.size / materials.length) * 100);
+  const progress = tutorials.length > 0 
+    ? Math.round((completedSet.size / tutorials.length) * 100) 
+    : 0;
 
   function goToQuiz() {
     router.push(`/dashboard/courses/learning/quiz?course=${courseId}`);
   }
 
-  function handleNext() {
-    if (activeIndex === -1) return;
-
-    const currentId = materials[activeIndex].id;
-
+  function markCurrentAsComplete() {
+    if (!activeTutorialId) return;
+    
+    // Track completion in backend
+    trackTutorial(activeTutorialId, 'complete').catch(err => {
+      console.warn('Failed to track completion in backend:', err);
+    });
+    
+    // Update local state and localStorage as fallback
     setCompletedMaterials((prev) => {
       const set = new Set(prev);
-      set.add(currentId);
+      set.add(activeTutorialId);
       const arr = Array.from(set);
       saveProgress(courseId, arr);
       return arr;
     });
+  }
 
-    if (activeIndex < materials.length - 1) {
-      const nextId = materials[activeIndex + 1].id;
-      if (nextId === examMaterialId) {
-        goToQuiz();
-      } else {
-        setActiveMaterialId(nextId);
-      }
+  function handleNext() {
+    if (activeIndex === -1) return;
+
+    markCurrentAsComplete();
+
+    if (activeIndex < tutorials.length - 1) {
+      const nextId = tutorials[activeIndex + 1].tutorial_id;
+      setActiveTutorialId(nextId);
     } else {
-      goToQuiz();
+      // Check if this is the last item, maybe go to quiz?
+      // For now, just stay or show completion message
+      // If there's a specific exam ID logic, it needs to be adapted
+      // Assuming no specific exam ID for now unless backend provides it
+      goToQuiz(); 
     }
   }
 
   function handlePrev() {
     if (activeIndex > 0) {
-      setActiveMaterialId(materials[activeIndex - 1].id);
+      setActiveTutorialId(tutorials[activeIndex - 1].tutorial_id);
     }
+  }
+
+  // Loading State
+  if (loadingJourney) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f7f9]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#36D7B7]"></div>
+          <p className={`${montserrat.className} text-gray-600`}>Memuat materi kursus...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error State
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f7f9]">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 max-w-md text-center">
+          <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+            <FiAlertCircle className="text-red-600 text-xl" />
+          </div>
+          <h3 className={`${quicksand.className} text-xl font-bold text-gray-900 mb-2`}>
+            Gagal Memuat Data
+          </h3>
+          <p className={`${montserrat.className} text-gray-600 mb-6`}>
+            {error}
+          </p>
+          <div className="flex gap-3 justify-center">
+            <Link
+              href="/dashboard/courses"
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm font-medium"
+            >
+              Kembali
+            </Link>
+            <button
+              onClick={fetchJourney}
+              className="px-4 py-2 bg-[#36D7B7] text-white rounded-lg hover:bg-[#2cc2a5] transition-colors text-sm font-medium flex items-center gap-2"
+            >
+              <FiRefreshCw /> Coba Lagi
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!journey || tutorials.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f7f9]">
+        <div className="text-center">
+          <h3 className={`${quicksand.className} text-xl font-bold text-gray-900`}>
+            Kursus Tidak Ditemukan
+          </h3>
+          <Link href="/dashboard/courses" className="text-[#36D7B7] hover:underline mt-2 block">
+            Kembali ke Daftar Kursus
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f5f7f9]">
       {/* HEADER */}
-      <header className="w-full border-b border-gray-200 bg-white">
+      <header className="w-full border-b border-gray-200 bg-white sticky top-0 z-10">
         <div className={`${container} mx-auto px-6 lg:px-10 py-4 flex items-center`}>
           <Link
             href="/dashboard/courses"
-            className={`${montserrat.className} inline-flex items-center text-sm text-black`}
+            className={`${montserrat.className} inline-flex items-center text-sm text-black hover:text-[#36D7B7] transition-colors`}
           >
-            <span className="mr-2">←</span> {course.title}
+            <span className="mr-2">←</span> {journey.title}
           </Link>
         </div>
       </header>
@@ -134,27 +328,34 @@ export default function LearningPage() {
       <main className={`${container} mx-auto px-6 lg:px-10 py-10 flex-1 w-full flex flex-col`}>
         <div className="flex flex-col md:flex-row gap-8">
           {/* Konten */}
-          <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-            <h1 className={`${quicksand.className} text-2xl md:text-3xl font-bold text-black mb-6`}>
-              {activeMaterial.title}
-            </h1>
+          <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 p-8 min-h-[500px]">
+            {loadingContent ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#36D7B7]"></div>
+              </div>
+            ) : activeTutorial ? (
+              <>
+                <h1 className={`${quicksand.className} text-2xl md:text-3xl font-bold text-black mb-6`}>
+                  {activeTutorial.title}
+                </h1>
 
-            <div className={`${montserrat.className} space-y-8 text-sm md:text-base text-black leading-relaxed`}>
-              {activeMaterial.sections.map((section, idx) => (
-                <section key={idx}>
-                  <h2 className="font-semibold text-base md:text-lg mb-3">{section.subtitle}</h2>
-                  {section.paragraphs.map((p, i) => (
-                    <p key={i} className="mb-2">
-                      {p}
-                    </p>
-                  ))}
-                </section>
-              ))}
-            </div>
+                <div className={`${montserrat.className} prose prose-slate max-w-none text-black leading-relaxed`}>
+                  {/* Render content safely - assuming plain text or basic HTML for now */}
+                  {/* If content is markdown or HTML, we might need a parser later */}
+                  <div className="whitespace-pre-wrap">
+                    {activeTutorial.content || "Konten belum tersedia."}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-10 text-gray-500">
+                Pilih materi untuk mulai belajar
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
-          <aside className="w-full md:w-80 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <aside className="w-full md:w-80 bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-fit sticky top-24">
             <h3 className={`${quicksand.className} text-lg font-semibold text-black mb-4`}>Daftar Materi</h3>
 
             <div className={`${montserrat.className} text-sm text-black`}>
@@ -169,13 +370,17 @@ export default function LearningPage() {
                 />
               </div>
 
-              <div className="space-y-3">
-                {materials.map((material, index) => {
-                  const isActive = material.id === activeMaterialId;
-                  const isCompleted = completedSet.has(material.id);
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                {tutorials.map((tutorial, index) => {
+                  const isActive = tutorial.tutorial_id === activeTutorialId;
+                  const isCompleted = completedSet.has(tutorial.tutorial_id);
 
-                  const canClick =
-                    index <= highestCompletedIndex || material.id === activeMaterialId;
+                  // Allow clicking any previous or current item, or the immediate next one
+                  // Or just allow clicking anything for better UX in this dynamic version?
+                  // Let's stick to the "unlocking" logic for now if desired, or open for all.
+                  // For now, let's make it open to navigate freely but visually indicate progress.
+                  const canClick = true; 
+                  // index <= highestCompletedIndex + 1 || tutorial.tutorial_id === activeTutorialId;
 
                   const baseClasses =
                     "flex items-center justify-between px-4 py-3 rounded-lg border text-sm transition-colors w-full text-left";
@@ -184,33 +389,27 @@ export default function LearningPage() {
                     ? "bg-[#36D7B7] border-[#36D7B7] text-white"
                     : isCompleted
                     ? "bg-[#b7f0d4] border-[#7bd6b6] text-black"
-                    : "bg-[#e5e7eb] border-[#d1d5db] text-black";
-
-                  function handleClick() {
-                    if (!canClick) return;
-                    if (material.id === examMaterialId) {
-                      goToQuiz();
-                    } else {
-                      setActiveMaterialId(material.id);
-                    }
-                  }
+                    : "bg-[#e5e7eb] border-[#d1d5db] text-black hover:bg-gray-200";
 
                   return (
                     <button
-                      key={material.id}
+                      key={tutorial.tutorial_id}
                       type="button"
                       disabled={!canClick}
-                      onClick={handleClick}
+                      onClick={() => {
+                        markCurrentAsComplete();
+                        setActiveTutorialId(tutorial.tutorial_id);
+                      }}
                       className={`${baseClasses} ${bgColor} ${
                         !canClick
                           ? "cursor-not-allowed opacity-60"
-                          : "cursor-pointer hover:bg-[#c6f5dd]"
+                          : "cursor-pointer"
                       }`}
                     >
-                      <span className="truncate">{material.title}</span>
+                      <span className="truncate flex-1">{tutorial.title}</span>
                       {isCompleted && (
-                        <span className="ml-3 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white">
-                          <FiCheck className="text-base text-[#16a34a]" />
+                        <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white flex-shrink-0">
+                          <FiCheck className="text-xs text-[#16a34a]" />
                         </span>
                       )}
                     </button>
@@ -223,19 +422,19 @@ export default function LearningPage() {
       </main>
 
       {/* FOOTER NAV */}
-      <footer className="border-t border-gray-200 bg-white mt-6">
+      <footer className="border-t border-gray-200 bg-white mt-6 sticky bottom-0 z-10">
         <div className={`${container} mx-auto px-6 lg:px-10 py-4 flex items-center justify-between`}>
           <button
             type="button"
-            disabled={activeIndex === 0}
+            disabled={activeIndex <= 0}
             onClick={handlePrev}
             className={`${montserrat.className} text-sm flex items-center gap-2 text-black disabled:opacity-40 disabled:cursor-not-allowed hover:underline hover:-translate-x-[1px] transition`}
           >
             ← Materi Sebelumnya
           </button>
 
-          <span className={`${quicksand.className} text-sm md:text-base font-semibold text-black`}>
-            Materi Ini
+          <span className={`${quicksand.className} text-sm md:text-base font-semibold text-black hidden md:block`}>
+            {activeTutorial ? activeTutorial.title : "Memuat..."}
           </span>
 
           <button
@@ -243,7 +442,7 @@ export default function LearningPage() {
             onClick={handleNext}
             className={`${montserrat.className} text-sm flex items-center gap-2 text-black hover:underline hover:translate-x-[1px] transition`}
           >
-            Materi Selanjutnya →
+            {activeIndex < tutorials.length - 1 ? "Materi Selanjutnya →" : "Selesaikan Kuis →"}
           </button>
         </div>
       </footer>
