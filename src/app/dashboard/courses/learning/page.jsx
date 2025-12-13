@@ -467,6 +467,35 @@ export default function LearningPage() {
                   );
                 })}
               </div>
+              
+              {/* Exam Panel */}
+              {journey?.exam_id && (
+                <div className="mt-6 pt-6 border-t border-gray-300">
+                  <h4 className={`${quicksand.className} text-sm font-semibold text-black mb-3`}>Ujian Akhir</h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      router.push(`/dashboard/courses/learning/quiz?course=${courseId}&examId=${journey.exam_id}`);
+                    }}
+                    className="flex items-center justify-between px-4 py-4 rounded-lg border-2 border-[#FFA500] bg-gradient-to-r from-[#FFF4E6] to-[#FFE4B5] text-black hover:shadow-md transition-all w-full text-left group"
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-[#FFA500] flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-sm">Ujian Akhir</p>
+                        <p className="text-xs text-gray-700 mt-0.5">Uji pemahaman Anda</p>
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-[#FFA500] group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
           </aside>
         </div>
