@@ -9,11 +9,26 @@ import ExplorePrompt from "@/components/ExplorePrompt";
 import ProgressOverview from "@/components/ProgressOverview";
 import { Quicksand, Montserrat } from "next/font/google";
 import { useAuth } from "@/contexts/AuthContext";
-import { getTrackingSummary } from "@/lib/tracking";
+import { getTrackingSummary, getUserActivities } from "@/lib/tracking";
+import { getJourneyDetail } from "@/lib/journeys";
 import { FiCheckCircle, FiClock, FiBookOpen } from "react-icons/fi";
 
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
+
+// Helper function to format relative time
+function getRelativeTime(timestamp) {
+  const now = new Date();
+  const past = new Date(timestamp);
+  const diffMs = now - past;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 60) return `${diffMins} menit lalu`;
+  if (diffHours < 24) return `${diffHours} jam lalu`;
+  return `${diffDays} hari lalu`;
+}
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -25,10 +40,14 @@ export default function DashboardPage() {
   ];
 
   const [trackingData, setTrackingData] = useState(null);
+  const [activities, setActivities] = useState([]);
+  const [completedJourneys, setCompletedJourneys] = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(true);
 
   useEffect(() => {
     fetchTrackingData();
+    fetchActivitiesData();
   }, []);
 
   async function fetchTrackingData() {
@@ -41,6 +60,56 @@ export default function DashboardPage() {
       console.error("Error fetching tracking data:", error);
     } finally {
       setLoadingStats(false);
+    }
+  }
+
+  async function fetchActivitiesData() {
+    try {
+      // Fetch recent activities
+      const activitiesResult = await getUserActivities(5, 0);
+      
+      if (activitiesResult.success && activitiesResult.data?.activities) {
+        const rawActivities = activitiesResult.data.activities;
+        
+        // Transform activities to match ProgressOverview format
+        const transformedActivities = rawActivities.map(activity => ({
+          status: activity.action === 'complete' ? 'Lulus' : 'Sedang dipelajari',
+          title: activity.tutorial_title || 'Tutorial',
+          timeAgo: getRelativeTime(activity.timestamp),
+          action: activity.action === 'complete' ? 'Selesai' : 'Belajar'
+        }));
+        
+        setActivities(transformedActivities);
+
+        // Get unique journey IDs from completed tutorials
+        const completedTutorials = rawActivities.filter(a => a.action === 'complete');
+        const journeyIds = [...new Set(completedTutorials.map(a => a.journey_id))];
+        
+        // Fetch journey details for completed journeys
+        const journeyPromises = journeyIds.slice(0, 4).map(id => getJourneyDetail(id));
+        const journeyResults = await Promise.all(journeyPromises);
+        
+        const transformedJourneys = journeyResults
+          .filter(result => result.success && result.data)
+          .map(result => {
+            const journey = result.data;
+            const tutorialCount = journey.tutorial?.length || 0;
+            
+            return {
+              title: journey.title || 'Journey',
+              duration: `${journey.duration_minutes || 0} menit`,
+              level: journey.difficulty || 'Beginner',
+              modules: `${tutorialCount} Tutorial`,
+              badge: journey.category || 'Learning'
+            };
+          });
+        
+        setCompletedJourneys(transformedJourneys);
+      }
+    } catch (error) {
+      console.error("Error fetching activities:", error);
+    } finally {
+      setLoadingProgress(false);
     }
   }
 
@@ -122,7 +191,25 @@ export default function DashboardPage() {
           </div>
         ) : null}
 
-        <div className="text-center">{hasProgress ? <ProgressOverview userName={userName} /> : <ExplorePrompt userName={userName} />}</div>
+        {/* Progress Overview or Explore Prompt */}
+        <div className="text-center">
+          {loadingProgress ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
+              <div className="animate-pulse space-y-4">
+                <div className="h-4 bg-gray-200 rounded w-1/4 mx-auto"></div>
+                <div className="h-8 bg-gray-200 rounded w-1/2 mx-auto"></div>
+              </div>
+            </div>
+          ) : hasProgress ? (
+            <ProgressOverview 
+              userName={userName}
+              activities={activities.length > 0 ? activities : undefined}
+              completedClasses={completedJourneys.length > 0 ? completedJourneys : undefined}
+            />
+          ) : (
+            <ExplorePrompt userName={userName} />
+          )}
+        </div>
       </main>
 
       <Footer containerClassName={container} />
