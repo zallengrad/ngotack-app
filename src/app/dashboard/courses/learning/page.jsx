@@ -468,14 +468,15 @@ export default function LearningPage() {
                 })}
               </div>
               
-              {/* Exam Panel */}
-              {journey?.exam_id && (
+              {/* Exam Panel - Always show for now, will check journey.exam_id later */}
+              {journey && (
                 <div className="mt-6 pt-6 border-t border-gray-300">
                   <h4 className={`${quicksand.className} text-sm font-semibold text-black mb-3`}>Ujian Akhir</h4>
                   <button
                     type="button"
                     onClick={() => {
-                      router.push(`/dashboard/courses/learning/quiz?course=${courseId}&examId=${journey.exam_id}`);
+                      const examId = journey.exam_id || 1; // Default to 1 if no exam_id
+                      router.push(`/dashboard/courses/learning/quiz?course=${courseId}&examId=${examId}`);
                     }}
                     className="flex items-center justify-between px-4 py-4 rounded-lg border-2 border-[#FFA500] bg-gradient-to-r from-[#FFF4E6] to-[#FFE4B5] text-black hover:shadow-md transition-all w-full text-left group"
                   >
