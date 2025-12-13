@@ -53,8 +53,13 @@ export default function DashboardPage() {
   async function fetchTrackingData() {
     try {
       const result = await getTrackingSummary();
+      console.log('📊 Tracking Summary Result:', result);
+      
       if (result.success && result.data) {
+        console.log('✅ Tracking Data:', result.data);
         setTrackingData(result.data);
+      } else {
+        console.warn('⚠️ No tracking data or failed:', result);
       }
     } catch (error) {
       console.error("Error fetching tracking data:", error);
@@ -67,44 +72,101 @@ export default function DashboardPage() {
     try {
       // Fetch recent activities
       const activitiesResult = await getUserActivities(5, 0);
+      console.log('📋 Activities Result:', activitiesResult);
       
       if (activitiesResult.success && activitiesResult.data?.activities) {
         const rawActivities = activitiesResult.data.activities;
+        console.log('📝 Raw Activities:', rawActivities);
         
-        // Transform activities to match ProgressOverview format
-        const transformedActivities = rawActivities.map(activity => ({
-          status: activity.action === 'complete' ? 'Lulus' : 'Sedang dipelajari',
-          title: activity.tutorial_title || 'Tutorial',
-          timeAgo: getRelativeTime(activity.timestamp),
-          action: activity.action === 'complete' ? 'Selesai' : 'Belajar'
+        // Group by journey_id to get unique journeys
+        const uniqueJourneyMap = new Map();
+        
+        rawActivities.forEach(activity => {
+          const journeyId = activity.journey_id;
+          // Keep the most recent activity for each journey
+          if (!uniqueJourneyMap.has(journeyId)) {
+            uniqueJourneyMap.set(journeyId, activity);
+          } else {
+            const existing = uniqueJourneyMap.get(journeyId);
+            const existingDate = new Date(existing.last_viewed_at || existing.created_at);
+            const currentDate = new Date(activity.last_viewed_at || activity.created_at);
+            
+            // Keep the more recent one
+            if (currentDate > existingDate) {
+              uniqueJourneyMap.set(journeyId, activity);
+            }
+          }
+        });
+        
+        // Convert map to array and transform
+        const uniqueActivities = Array.from(uniqueJourneyMap.values());
+        
+        const transformedActivities = uniqueActivities.map(activity => ({
+          status: activity.is_completed ? 'Lulus' : 'Sedang dipelajari',
+          title: activity.journeys?.title || activity.tutorial?.title || 'Tutorial',
+          timeAgo: getRelativeTime(activity.last_viewed_at || activity.created_at),
+          action: activity.is_completed ? 'Selesai' : 'Belajar'
         }));
         
+        console.log('✨ Transformed Activities (unique):', transformedActivities);
         setActivities(transformedActivities);
 
-        // Get unique journey IDs from completed tutorials
-        const completedTutorials = rawActivities.filter(a => a.action === 'complete');
-        const journeyIds = [...new Set(completedTutorials.map(a => a.journey_id))];
+        // Get unique journey IDs from all activities (not just completed)
+        const journeyIds = [...new Set(rawActivities.map(a => a.journey_id).filter(Boolean))];
         
-        // Fetch journey details for completed journeys
-        const journeyPromises = journeyIds.slice(0, 4).map(id => getJourneyDetail(id));
-        const journeyResults = await Promise.all(journeyPromises);
+        console.log('🎯 Journey IDs to fetch:', journeyIds);
         
-        const transformedJourneys = journeyResults
-          .filter(result => result.success && result.data)
-          .map(result => {
-            const journey = result.data;
-            const tutorialCount = journey.tutorial?.length || 0;
-            
-            return {
-              title: journey.title || 'Journey',
-              duration: `${journey.duration_minutes || 0} menit`,
-              level: journey.difficulty || 'Beginner',
-              modules: `${tutorialCount} Tutorial`,
-              badge: journey.category || 'Learning'
-            };
+        if (journeyIds.length > 0) {
+          // Fetch journey details for all journeys
+          const journeyPromises = journeyIds.slice(0, 10).map(id => getJourneyDetail(id));
+          const journeyResults = await Promise.all(journeyPromises);
+          
+          // Count completed tutorials per journey
+          const completedTutorialsPerJourney = {};
+          rawActivities.forEach(activity => {
+            if (activity.is_completed) {
+              const journeyId = activity.journey_id;
+              if (!completedTutorialsPerJourney[journeyId]) {
+                completedTutorialsPerJourney[journeyId] = new Set();
+              }
+              completedTutorialsPerJourney[journeyId].add(activity.tutorial_id);
+            }
           });
-        
-        setCompletedJourneys(transformedJourneys);
+          
+          console.log('📊 Completed tutorials per journey:', completedTutorialsPerJourney);
+          
+          // Filter only journeys where ALL tutorials are completed
+          const transformedJourneys = journeyResults
+            .filter(result => result.success && result.data)
+            .filter(result => {
+              const journey = result.data;
+              const journeyId = journey.journey_id;
+              const totalTutorials = journey.tutorial?.length || 0;
+              const completedTutorials = completedTutorialsPerJourney[journeyId]?.size || 0;
+              
+              console.log(`🎯 Journey "${journey.title}": ${completedTutorials}/${totalTutorials} tutorials completed`);
+              
+              // Only include if ALL tutorials are completed
+              return totalTutorials > 0 && completedTutorials === totalTutorials;
+            })
+            .map(result => {
+              const journey = result.data;
+              const tutorialCount = journey.tutorial?.length || 0;
+              
+              return {
+                title: journey.title || 'Journey',
+                duration: `${journey.duration_minutes || 0} menit`,
+                level: journey.difficulty || 'Beginner',
+                modules: `${tutorialCount} Tutorial`,
+                badge: journey.category || 'Learning'
+              };
+            });
+          
+          console.log('🎓 Fully Completed Journeys:', transformedJourneys);
+          setCompletedJourneys(transformedJourneys);
+        }
+      } else {
+        console.warn('⚠️ No activities data');
       }
     } catch (error) {
       console.error("Error fetching activities:", error);
@@ -118,7 +180,26 @@ export default function DashboardPage() {
     window.location.href = "/auth/login";
   };
 
-  const hasProgress = trackingData && (trackingData.completed > 0 || trackingData.inProgress > 0);
+  // Show ProgressOverview if:
+  // 1. Tracking data shows completed or in-progress tutorials, OR
+  // 2. We have activities data, OR
+  // 3. We have completed journeys data
+  const hasProgress = (trackingData && (trackingData.completed > 0 || trackingData.inProgress > 0)) ||
+                      activities.length > 0 ||
+                      completedJourneys.length > 0;
+  
+  // Debug logging
+  console.log('🔍 Dashboard Debug:', {
+    trackingData,
+    hasProgress,
+    activitiesCount: activities.length,
+    completedJourneysCount: completedJourneys.length,
+    loadingProgress,
+    loadingStats,
+    condition1: trackingData && (trackingData.completed > 0 || trackingData.inProgress > 0),
+    condition2: activities.length > 0,
+    condition3: completedJourneys.length > 0
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-white text-gray-900">
