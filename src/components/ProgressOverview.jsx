@@ -19,14 +19,24 @@ const defaultCompleted = [
 ];
 
 function ActivityCard({ status, title, timeAgo, action }) {
+  const isCompleted = status === "Lulus";
+  const bgColor = isCompleted ? "bg-[#66ddb3]" : "bg-[#9beccf]";
+  const borderColor = isCompleted ? "border-[#56c8a0]" : "border-[#7fd4b7]";
+  
   return (
-    <div className="bg-[#66ddb3] rounded-lg p-4 flex items-start justify-between shadow-sm border border-[#56c8a0]">
-      <div>
-        <p className="text-xs text-gray-900 font-semibold mb-1">{status}</p>
-        <p className="text-base text-gray-900 font-semibold">{title}</p>
-        <p className="text-xs text-gray-800 mt-1">{timeAgo}</p>
-      </div>
-      <span className="text-sm text-gray-900 font-semibold">{action}</span>
+    <div className={`${bgColor} ${borderColor} rounded-lg p-5 border shadow-sm hover:shadow-md transition-shadow duration-200`}>
+      {/* Journey title */}
+      <h4 className="text-base font-bold text-gray-900 mb-2 leading-snug">
+        {title}
+      </h4>
+      
+      {/* Timestamp */}
+      <p className="text-xs text-gray-800 flex items-center gap-1">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        {timeAgo}
+      </p>
     </div>
   );
 }
@@ -41,14 +51,6 @@ function CompletedCard({ title, duration, level, modules, badge }) {
       <h3 className={`${quicksand.className} text-xl font-semibold text-gray-900 mb-2`}>{title}</h3>
       <div className="inline-flex items-center px-3 py-1 rounded-full bg-[#3bbf95] text-white text-xs font-semibold mb-4">{badge}</div>
       <div className="flex flex-wrap gap-6 text-sm text-gray-800">
-        <div className="flex items-center gap-2">
-          <FiClock />
-          <span>{duration}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <FiMapPin />
-          <span>{level}</span>
-        </div>
         <div className="flex items-center gap-2">
           <FiLayers />
           <span>{modules}</span>
@@ -88,7 +90,7 @@ export default function ProgressOverview({
             <FiBookmark className="text-lg text-gray-800" />
             <span className={`${montserrat.className} text-lg font-semibold text-gray-800`}>Aktivitas Belajar</span>
           </div>
-          <div className="p-4 space-y-3">
+          <div className="p-4 space-y-3 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             {activities.map((item, idx) => (
               <ActivityCard key={`${item.title}-${idx}`} {...item} />
             ))}
@@ -102,7 +104,7 @@ export default function ProgressOverview({
           <FiBookOpen className="text-lg text-gray-800" />
           <span className={`${montserrat.className} text-lg font-semibold text-gray-800`}>Kelas Selesai</span>
         </div>
-        <div className="p-6 grid md:grid-cols-2 gap-4">
+        <div className="p-6 grid md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {completedClasses.map((item, idx) => (
             <CompletedCard key={`${item.title}-${idx}`} {...item} />
           ))}

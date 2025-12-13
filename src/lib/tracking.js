@@ -44,8 +44,11 @@ export async function getTrackingSummary(startDate = null, endDate = null) {
     }
     
     const response = await apiGet(endpoint);
-    console.log('📊 Tracking summary:', response);
-    return { success: true, data: response };
+    console.log('📊 Tracking summary response:', response);
+    
+    // Unwrap nested data property
+    const summaryData = response.data || response;
+    return { success: true, data: summaryData };
   } catch (error) {
     console.error('Error fetching tracking summary:', error);
     return { success: false, error: error.message };
@@ -76,8 +79,11 @@ export async function getTrackingStats() {
 export async function getUserActivities(limit = 5, offset = 0) {
   try {
     const response = await apiGet(`/tracking/activities?limit=${limit}&offset=${offset}`);
-    console.log('📋 User activities:', response);
-    return { success: true, data: response };
+    console.log('📋 User activities response:', response);
+    
+    // Unwrap nested data property
+    const activitiesData = response.data || response;
+    return { success: true, data: activitiesData };
   } catch (error) {
     console.error('Error fetching user activities:', error);
     return { success: false, error: error.message };
