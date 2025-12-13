@@ -1,18 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Quicksand, Montserrat } from "next/font/google";
-import { getCourseById } from "@/config/courses";
+import { getExamQuestions, submitExamAnswers } from "@/lib/exams";
 
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
-
-const QUIZ_DURATION_SECONDS = 10 * 60;
-
-const resultKey = (courseId) => `ngotack-quiz-last-result-${courseId}`;
-const historyKey = (courseId) => `ngotack-quiz-history-${courseId}`;
-const progressKey = (courseId) => `ngotack-progress-${courseId}`;
 
 function formatTime(seconds) {
   const m = String(Math.floor(seconds / 60)).padStart(2, "0");
@@ -20,57 +14,118 @@ function formatTime(seconds) {
   return `${m}:${s}`;
 }
 
-function updateQuizProgress(courseId, passed, examMaterialId) {
-  if (typeof window === "undefined") return;
-  try {
-    const stored = JSON.parse(localStorage.getItem(progressKey(courseId)) || "null") || {
-      completedMaterialIds: [],
-    };
-    let ids = Array.isArray(stored.completedMaterialIds)
-      ? [...stored.completedMaterialIds]
-      : [];
-
-    const idx = ids.indexOf(examMaterialId);
-    if (passed) {
-      if (idx === -1) ids.push(examMaterialId);
-    } else if (idx !== -1) {
-      ids.splice(idx, 1);
-    }
-
-    localStorage.setItem(progressKey(courseId), JSON.stringify({ completedMaterialIds: ids }));
-  } catch {
-    //
-  }
-}
-
-function saveResultHistory(courseId, result) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(resultKey(courseId), JSON.stringify(result));
-    const existing = JSON.parse(localStorage.getItem(historyKey(courseId)) || "[]");
-    const updated = [result, ...existing];
-    localStorage.setItem(historyKey(courseId), JSON.stringify(updated.slice(0, 20)));
-  } catch {
-    //
-  }
-}
-
 export default function QuizWorkPage() {
   const container = "max-w-[1400px]";
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const courseId = searchParams.get("course") || "frontend-basic";
-  const course = useMemo(() => getCourseById(courseId), [courseId]);
-  const questions = course.quizQuestions;
-  const examMaterialId = course.materials[course.materials.length - 1].id;
+  const courseId = searchParams.get("course");
+  const examId = searchParams.get("examId") || 1;
 
+  // Exam data from backend
+  const [examData, setExamData] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Quiz state
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState(Array(questions.length).fill(null));
-  const [timeLeft, setTimeLeft] = useState(QUIZ_DURATION_SECONDS);
+  const [answers, setAnswers] = useState([]);
+  const [timeLeft, setTimeLeft] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // ✅ Prevent duplicate API calls (React Strict Mode fix)
+  const hasFetchedRef = useRef(false);
+  const isFetchingRef = useRef(false);
+
+  // Fetch exam data on mount
   useEffect(() => {
+    // ✅ Prevent duplicate calls in React Strict Mode
+    if (hasFetchedRef.current || isFetchingRef.current) {
+      console.log("⏭️ Skipping duplicate fetch (already fetched or in progress)");
+      return;
+    }
+
+    async function fetchExam() {
+      // Mark as fetching
+      isFetchingRef.current = true;
+      setLoading(true);
+      
+      try {
+        console.log(`📝 Fetching exam ${examId} for quiz work page...`);
+        
+        // Try to get from localStorage first (for 409 conflict cases)
+        const cachedExam = localStorage.getItem(`exam-${examId}-data`);
+        
+        const result = await getExamQuestions(examId);
+        
+        if (result.success && result.data) {
+          console.log("✅ Exam data loaded:", result.data);
+          const { exam, questions: examQuestions } = result.data;
+          
+          // Cache exam data for future use
+          localStorage.setItem(`exam-${examId}-data`, JSON.stringify(result.data));
+          
+          setExamData(exam);
+          setQuestions(examQuestions || []);
+          setAnswers(Array(examQuestions?.length || 0).fill(null));
+          
+          // Set timer from backend (remaining_seconds or duration_seconds)
+          const duration = exam.remaining_seconds || exam.duration_seconds || 600;
+          setTimeLeft(duration);
+          
+          // Mark as successfully fetched
+          hasFetchedRef.current = true;
+          setLoading(false);
+        } else if (result.error && result.error.includes("Konflik")) {
+          // 409 Conflict - exam already started
+          console.log("⚠️ 409 Conflict detected - exam already started");
+          
+          if (cachedExam) {
+            // Use cached data if available
+            console.log("✅ Using cached exam data");
+            const cachedData = JSON.parse(cachedExam);
+            const { exam, questions: examQuestions } = cachedData;
+            
+            setExamData(exam);
+            setQuestions(examQuestions || []);
+            setAnswers(Array(examQuestions?.length || 0).fill(null));
+            
+            // Use full duration since we don't know remaining time
+            const duration = exam.duration_seconds || 600;
+            setTimeLeft(duration);
+            
+            // Mark as successfully fetched
+            hasFetchedRef.current = true;
+            setLoading(false);
+          } else {
+            // No cached data - show helpful error
+            console.error("❌ No cached data available for already-started exam");
+            setError("Ujian ini sudah pernah dimulai sebelumnya. Silakan hubungi admin untuk reset ujian atau kembali ke halaman kursus.");
+            setLoading(false);
+          }
+        } else {
+          console.error("❌ Failed to load exam:", result.error);
+          setError(result.error || "Gagal memuat soal ujian");
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("❌ Error fetching exam:", err);
+        setError("Terjadi kesalahan saat memuat ujian");
+        setLoading(false);
+      } finally {
+        // Reset fetching flag
+        isFetchingRef.current = false;
+      }
+    }
+
+    fetchExam();
+  }, [examId]);
+
+  // Timer countdown
+  useEffect(() => {
+    if (loading || !examData) return;
+    
     if (timeLeft <= 0) {
       handleSubmit(true);
       return;
@@ -82,43 +137,53 @@ export default function QuizWorkPage() {
 
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft]);
+  }, [timeLeft, loading, examData]);
 
   const currentQuestion = questions[currentIndex];
   const someUnanswered = answers.some((a) => a === null);
   const isLastQuestion = currentIndex === questions.length - 1;
 
-  function selectOption(optionKey) {
+  function selectOption(optionValue) {
     setAnswers((prev) => {
       const copy = [...prev];
-      copy[currentIndex] = optionKey;
+      copy[currentIndex] = optionValue;
       return copy;
     });
   }
 
-  function handleSubmit(auto = false) {
+  async function handleSubmit(auto = false) {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
-    const total = questions.length;
-    let correct = 0;
-    questions.forEach((q, index) => {
-      if (answers[index] && answers[index] === q.correctOptionKey) {
-        correct += 1;
+    try {
+      // Prepare answers in backend format
+      const formattedAnswers = answers.map((answer, index) => ({
+        question_no: index + 1,
+        selected_option: answer || ""
+      }));
+
+      console.log("📤 Submitting exam answers:", formattedAnswers);
+      
+      const result = await submitExamAnswers(examId, formattedAnswers);
+      
+      if (result.success && result.data) {
+        console.log("✅ Exam submitted successfully:", result.data);
+        
+        // Save result to localStorage for result page
+        localStorage.setItem(`exam-${examId}-result`, JSON.stringify(result.data));
+        
+        // Navigate to result page with result data
+        router.push(`/dashboard/courses/learning/quiz/result?course=${courseId}&examId=${examId}`);
+      } else {
+        console.error("❌ Failed to submit exam:", result.error);
+        alert("Gagal mengirim jawaban. Silakan coba lagi.");
+        setIsSubmitting(false);
       }
-    });
-
-    const score = Math.round((correct / total) * 100);
-    const passed = score >= 80; // minimal 80
-    const status = passed ? "Lulus" : "Tidak Lulus";
-    const finishedAt = new Date().toISOString();
-
-    const result = { score, status, finishedAt, autoSubmit: auto };
-
-    updateQuizProgress(courseId, passed, examMaterialId);
-    saveResultHistory(courseId, result);
-
-    router.push(`/dashboard/courses/learning/quiz?course=${courseId}`);
+    } catch (error) {
+      console.error("❌ Error submitting exam:", error);
+      alert("Terjadi kesalahan saat mengirim jawaban.");
+      setIsSubmitting(false);
+    }
   }
 
   function goNext() {
@@ -137,6 +202,50 @@ export default function QuizWorkPage() {
     }
   }
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f7f9]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#36D7B7]"></div>
+          <p className={`${montserrat.className} text-gray-600`}>Memuat soal ujian...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f7f9]">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 max-w-md text-center">
+          <h3 className={`${quicksand.className} text-xl font-bold text-gray-900 mb-2`}>
+            Gagal Memuat Ujian
+          </h3>
+          <p className={`${montserrat.className} text-gray-600 mb-6`}>{error}</p>
+          <button
+            onClick={() => router.push(`/dashboard/courses/learning/quiz?course=${courseId}&examId=${examId}`)}
+            className="px-4 py-2 bg-[#36D7B7] text-white rounded-lg hover:bg-[#2cc2a5] transition-colors text-sm font-medium"
+          >
+            Kembali
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f7f9]">
+        <div className="text-center">
+          <h3 className={`${quicksand.className} text-xl font-bold text-gray-900`}>
+            Tidak ada soal ujian
+          </h3>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f5f7f9]">
       {/* HEADER */}
@@ -147,7 +256,7 @@ export default function QuizWorkPage() {
             onClick={() => router.push(`/dashboard/courses/learning?course=${courseId}`)}
             className={`${montserrat.className} inline-flex items-center text-sm text-black`}
           >
-            <span className="mr-2">←</span> {course.title}
+            <span className="mr-2">←</span> {examData?.title || "Ujian Akhir"}
           </button>
 
           <div
@@ -184,7 +293,7 @@ export default function QuizWorkPage() {
 
                   return (
                     <button
-                      key={q.id}
+                      key={q.question_no || index}
                       type="button"
                       onClick={() => setCurrentIndex(index)}
                       className={cls}
@@ -200,17 +309,23 @@ export default function QuizWorkPage() {
           {/* Soal */}
           <section className="flex-1 bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
             <h1 className={`${quicksand.className} text-lg md:text-xl font-semibold mb-6 text-black`}>
-              {currentQuestion.question}
+              Peran utama seorang {currentQuestion?.question_text || "Loading..."}
             </h1>
 
             <div className="space-y-4">
-              {currentQuestion.options.map((opt) => {
-                const isSelected = answers[currentIndex] === opt.key;
+              {["a", "b", "c", "d"].map((optionKey) => {
+                const optionField = `option_${optionKey}`;
+                const optionText = currentQuestion?.[optionField];
+                
+                if (!optionText) return null;
+                
+                const isSelected = answers[currentIndex] === optionText;
+                
                 return (
                   <button
-                    key={opt.key}
+                    key={optionKey}
                     type="button"
-                    onClick={() => selectOption(opt.key)}
+                    onClick={() => selectOption(optionText)}
                     className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl border text-left transition-colors ${
                       isSelected
                         ? "bg-[#36D7B7] border-[#36D7B7] text-white"
@@ -218,9 +333,9 @@ export default function QuizWorkPage() {
                     }`}
                   >
                     <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white text-sm font-semibold text-black">
-                      {opt.key}.
+                      {optionKey}.
                     </span>
-                    <span className={`${montserrat.className} text-sm md:text-base`}>{opt.text}</span>
+                    <span className={`${montserrat.className} text-sm md:text-base`}>{optionText}</span>
                   </button>
                 );
               })}
@@ -239,10 +354,10 @@ export default function QuizWorkPage() {
               <button
                 type="button"
                 onClick={goNext}
-                disabled={isLastQuestion && someUnanswered}
+                disabled={(isLastQuestion && someUnanswered) || isSubmitting}
                 className={`${montserrat.className} inline-flex items-center gap-2 px-6 py-2 rounded-md bg-[#36D7B7] text-white text-sm font-semibold hover:bg-[#2bb399] disabled:opacity-40 disabled:cursor-not-allowed`}
               >
-                {isLastQuestion ? "Selesai" : "Lanjut →"}
+                {isSubmitting ? "Mengirim..." : isLastQuestion ? "Selesai" : "Lanjut →"}
               </button>
             </div>
           </section>
@@ -253,7 +368,7 @@ export default function QuizWorkPage() {
       <footer className="border-t border-gray-200 bg-white">
         <div className={`${container} mx-auto px-6 lg:px-10 py-4 flex items-center justify-center`}>
           <span className={`${quicksand.className} text-sm md:text-base font-semibold text-black`}>
-            Ujian Akhir
+            {examData?.title || "Ujian Akhir"}
           </span>
         </div>
       </footer>
