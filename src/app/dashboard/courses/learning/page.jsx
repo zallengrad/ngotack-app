@@ -57,6 +57,10 @@ export default function LearningPage() {
   const [error, setError] = useState(null);
   const [completedMaterials, setCompletedMaterials] = useState([]);
   const [trackedStarts, setTrackedStarts] = useState(new Set()); // Track which tutorials have been marked as "start"
+  
+  // Activity tracking for heartbeat
+  const [isUserActive, setIsUserActive] = useState(true);
+  const [lastActivityTime, setLastActivityTime] = useState(Date.now());
 
   // Fetch Journey Details
   const fetchJourney = useCallback(async () => {
@@ -170,6 +174,39 @@ export default function LearningPage() {
     }
   }, [activeTutorialId, courseId, fetchContent, trackedStarts]);
 
+  // Activity Detection - Track user activity (mouse, scroll, keyboard)
+  useEffect(() => {
+    const updateActivity = () => {
+      setLastActivityTime(Date.now());
+      setIsUserActive(true);
+    };
+
+    // Event listeners for user activity
+    window.addEventListener('mousemove', updateActivity);
+    window.addEventListener('scroll', updateActivity);
+    window.addEventListener('keydown', updateActivity);
+    window.addEventListener('click', updateActivity);
+
+    // Check for idle every 10 seconds
+    const idleCheckInterval = setInterval(() => {
+      const timeSinceLastActivity = Date.now() - lastActivityTime;
+      const IDLE_THRESHOLD = 60000; // 60 seconds
+
+      if (timeSinceLastActivity > IDLE_THRESHOLD) {
+        setIsUserActive(false);
+        console.log('🛑 User idle detected - heartbeat paused');
+      }
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('mousemove', updateActivity);
+      window.removeEventListener('scroll', updateActivity);
+      window.removeEventListener('keydown', updateActivity);
+      window.removeEventListener('click', updateActivity);
+      clearInterval(idleCheckInterval);
+    };
+  }, [lastActivityTime]);
+
   // Activity Heartbeat - Send periodic heartbeat while user is active
   useEffect(() => {
     if (!activeTutorialId || !courseId) return;
@@ -179,14 +216,28 @@ export default function LearningPage() {
 
     // Set up interval to send heartbeat every 30 seconds
     const heartbeatInterval = setInterval(() => {
-      sendHeartbeat(parseInt(courseId), activeTutorialId);
+      // Check visibility state
+      const isTabVisible = document.visibilityState === 'visible';
+      
+      // Only send heartbeat if tab is visible AND user is active
+      if (isTabVisible && isUserActive) {
+        console.log('💓 Heartbeat sent - user active');
+        sendHeartbeat(parseInt(courseId), activeTutorialId);
+      } else {
+        if (!isTabVisible) {
+          console.log('⏸️ Heartbeat paused - tab hidden');
+        }
+        if (!isUserActive) {
+          console.log('⏸️ Heartbeat paused - user idle');
+        }
+      }
     }, 30000); // 30 seconds
 
     // Cleanup: stop heartbeat when tutorial changes or component unmounts
     return () => {
       clearInterval(heartbeatInterval);
     };
-  }, [activeTutorialId, courseId]);
+  }, [activeTutorialId, courseId, isUserActive]);
 
   // Derived state
   const completedSet = new Set(completedMaterials);
