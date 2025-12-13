@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Quicksand, Montserrat } from "next/font/google";
-import { getExamQuestions } from "@/lib/exams";
 
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
@@ -48,32 +47,12 @@ export default function QuizIntroPage() {
   async function handleStartExam() {
     setLoading(true);
     
-    try {
-      console.log(`🎯 Fetching exam ${examId}...`);
-      const result = await getExamQuestions(examId);
-      
-      if (result.success && result.data) {
-        console.log("✅ Exam data loaded:", result.data);
-        // Navigate to work page with exam data
-        router.push(`/dashboard/courses/learning/quiz/work?course=${courseId}&examId=${examId}`);
-      } else {
-        console.error("❌ Failed to load exam:", result.error);
-        
-        // Check if it's a 409 conflict (already registered)
-        if (result.error && result.error.includes("Konflik")) {
-          // User already registered, just proceed to exam
-          console.log("⚠️ User already registered for exam, proceeding anyway...");
-          router.push(`/dashboard/courses/learning/quiz/work?course=${courseId}&examId=${examId}`);
-        } else {
-          alert("Gagal memuat soal ujian. Silakan coba lagi.");
-          setLoading(false);
-        }
-      }
-    } catch (error) {
-      console.error("❌ Error starting exam:", error);
-      alert("Terjadi kesalahan. Silakan coba lagi.");
-      setLoading(false);
-    }
+    // ✅ Don't fetch exam data here - let QuizWorkPage handle it
+    // This prevents duplicate API calls and 409 Conflict errors
+    console.log(`🎯 Starting exam ${examId}...`);
+    
+    // Directly navigate to work page
+    router.push(`/dashboard/courses/learning/quiz/work?course=${courseId}&examId=${examId}`);
   }
 
   return (

@@ -49,6 +49,11 @@ export async function apiRequest(endpoint, options = {}) {
     
     // Handle errors
     if (!response.ok) {
+      // Special handling for 409 Conflict (exam already started)
+      if (response.status === 409) {
+        throw new Error(data.message || 'Konflik registrasi ujian. Anda mungkin sudah terdaftar atau terdapat batasan sistem.');
+      }
+      
       // Special handling for rate limit
       if (response.status === 429) {
         throw new Error('Terlalu banyak percobaan login. Silakan tunggu beberapa menit dan coba lagi.');
