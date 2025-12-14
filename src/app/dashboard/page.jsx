@@ -6,11 +6,12 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import StatsCard from "@/components/StatsCard";
 import ExplorePrompt from "@/components/ExplorePrompt";
-import ProgressOverview from "@/components/ProgressOverview";
+import InsightOverview from "@/components/InsightOverview";
 import { Quicksand, Montserrat } from "next/font/google";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTrackingSummary, getUserActivities } from "@/lib/tracking";
 import { getJourneyDetail } from "@/lib/journeys";
+import { getInsightsHybrid } from "@/lib/insights";
 import { FiCheckCircle, FiClock, FiBookOpen } from "react-icons/fi";
 
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
@@ -44,10 +45,16 @@ export default function DashboardPage() {
   const [completedJourneys, setCompletedJourneys] = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(true);
+  
+  // AI Insights State
+  const [insightsData, setInsightsData] = useState(null);
+  const [loadingInsights, setLoadingInsights] = useState(true);
+  const [insightsError, setInsightsError] = useState(null);
 
   useEffect(() => {
     fetchTrackingData();
     fetchActivitiesData();
+    fetchInsights();
   }, []);
 
   async function fetchTrackingData() {
@@ -175,6 +182,26 @@ export default function DashboardPage() {
     }
   }
 
+  async function fetchInsights() {
+    try {
+      console.log('🤖 Fetching AI Insights (Hybrid)...');
+      const result = await getInsightsHybrid(user?.userId);
+      console.log('✅ Insights Result:', result);
+      
+      if (result.success && result.data) {
+        setInsightsData(result.data);
+        setInsightsError(null);
+      } else {
+        setInsightsError(result.error || 'Gagal mengambil insights');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching insights:', error);
+      setInsightsError(error.message);
+    } finally {
+      setLoadingInsights(false);
+    }
+  }
+
   const handleLogout = () => {
     logout();
     window.location.href = "/auth/login";
@@ -272,24 +299,15 @@ export default function DashboardPage() {
           </div>
         ) : null}
 
-        {/* Progress Overview or Explore Prompt */}
+        {/* AI Insights Section */}
         <div className="text-center">
-          {loadingProgress ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
-              <div className="animate-pulse space-y-4">
-                <div className="h-4 bg-gray-200 rounded w-1/4 mx-auto"></div>
-                <div className="h-8 bg-gray-200 rounded w-1/2 mx-auto"></div>
-              </div>
-            </div>
-          ) : hasProgress ? (
-            <ProgressOverview 
-              userName={userName}
-              activities={activities.length > 0 ? activities : undefined}
-              completedClasses={completedJourneys.length > 0 ? completedJourneys : undefined}
-            />
-          ) : (
-            <ExplorePrompt userName={userName} />
-          )}
+          <InsightOverview 
+            learningProfile={insightsData?.learningProfile}
+            progressSummary={insightsData?.progressSummary}
+            loading={loadingInsights}
+            error={insightsError}
+            userName={userName}
+          />
         </div>
       </main>
 
