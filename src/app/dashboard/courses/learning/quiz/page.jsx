@@ -28,7 +28,7 @@ export default function QuizIntroPage() {
   const searchParams = useSearchParams();
 
   const courseId = searchParams.get("course");
-  const examId = searchParams.get("examId") || 1;
+  const examId = searchParams.get("examId"); // No default fallback!
 
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);

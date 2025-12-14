@@ -31,9 +31,34 @@ export async function getAllJourneys() {
  */
 export async function getJourneyDetail(journeyId) {
   try {
-    const response = await apiGet(`/journeys/${journeyId}`);
+    // Get auth token from localStorage
+    const token = localStorage.getItem('token');
+    
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // Use Next.js API route which adds exam_id from Supabase
+    // This is a workaround since backend doesn't return exam_id
+    const response = await fetch(`/api/journeys/${journeyId}`, {
+      headers,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
     // Handle wrapped response
-    const journey = response.data || response;
+    const journey = data.data || data;
+    
+    console.log('📚 Journey Detail (with exam_id from Supabase):', journey);
+    
     return { success: true, data: journey };
   } catch (error) {
     console.error(`Error fetching journey ${journeyId}:`, error);

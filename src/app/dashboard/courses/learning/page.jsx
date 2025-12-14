@@ -6,7 +6,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Quicksand, Montserrat } from "next/font/google";
 import { FiCheck, FiAlertCircle, FiRefreshCw } from "react-icons/fi";
 import { getJourneyDetail, getTutorialContent } from "@/lib/journeys";
-import { trackTutorial, getTrackingSummary, sendHeartbeat } from "@/lib/tracking";
+import { trackTutorial, getTrackingSummary, updateUserSummary } from "@/lib/tracking";
+import { useHeartbeat } from "@/hooks/useHeartbeat";
 
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["600", "700"], display: "swap" });
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
@@ -58,9 +59,12 @@ export default function LearningPage() {
   const [completedMaterials, setCompletedMaterials] = useState([]);
   const [trackedStarts, setTrackedStarts] = useState(new Set()); // Track which tutorials have been marked as "start"
   
-  // Activity tracking for heartbeat
-  const [isUserActive, setIsUserActive] = useState(true);
-  const [lastActivityTime, setLastActivityTime] = useState(Date.now());
+  // Use heartbeat hook for automatic activity tracking
+  const { isTracking, isIdle, isTabVisible } = useHeartbeat(
+    courseId ? parseInt(courseId) : null,
+    activeTutorialId,
+    !!activeTutorialId // Only track when there's an active tutorial
+  );
 
   // Fetch Journey Details
   const fetchJourney = useCallback(async () => {
@@ -74,6 +78,8 @@ export default function LearningPage() {
       
       if (result.success) {
         console.log("Journey Details Fetched:", result.data);
+        console.log("🎯 exam_id:", result.data.exam_id);
+        console.log("📝 exam_title:", result.data.exam_title);
         setJourney(result.data);
         // Handle both 'tutorial' (from API spec) and potentially 'tutorials' property names
         const tutorialList = result.data.tutorial || result.data.tutorials || [];
@@ -174,71 +180,6 @@ export default function LearningPage() {
     }
   }, [activeTutorialId, courseId, fetchContent, trackedStarts]);
 
-  // Activity Detection - Track user activity (mouse, scroll, keyboard)
-  useEffect(() => {
-    const updateActivity = () => {
-      setLastActivityTime(Date.now());
-      setIsUserActive(true);
-    };
-
-    // Event listeners for user activity
-    window.addEventListener('mousemove', updateActivity);
-    window.addEventListener('scroll', updateActivity);
-    window.addEventListener('keydown', updateActivity);
-    window.addEventListener('click', updateActivity);
-
-    // Check for idle every 10 seconds
-    const idleCheckInterval = setInterval(() => {
-      const timeSinceLastActivity = Date.now() - lastActivityTime;
-      const IDLE_THRESHOLD = 60000; // 60 seconds
-
-      if (timeSinceLastActivity > IDLE_THRESHOLD) {
-        setIsUserActive(false);
-        console.log('🛑 User idle detected - heartbeat paused');
-      }
-    }, 10000);
-
-    return () => {
-      window.removeEventListener('mousemove', updateActivity);
-      window.removeEventListener('scroll', updateActivity);
-      window.removeEventListener('keydown', updateActivity);
-      window.removeEventListener('click', updateActivity);
-      clearInterval(idleCheckInterval);
-    };
-  }, [lastActivityTime]);
-
-  // Activity Heartbeat - Send periodic heartbeat while user is active
-  useEffect(() => {
-    if (!activeTutorialId || !courseId) return;
-
-    // Send initial heartbeat
-    sendHeartbeat(parseInt(courseId), activeTutorialId);
-
-    // Set up interval to send heartbeat every 30 seconds
-    const heartbeatInterval = setInterval(() => {
-      // Check visibility state
-      const isTabVisible = document.visibilityState === 'visible';
-      
-      // Only send heartbeat if tab is visible AND user is active
-      if (isTabVisible && isUserActive) {
-        console.log('💓 Heartbeat sent - user active');
-        sendHeartbeat(parseInt(courseId), activeTutorialId);
-      } else {
-        if (!isTabVisible) {
-          console.log('⏸️ Heartbeat paused - tab hidden');
-        }
-        if (!isUserActive) {
-          console.log('⏸️ Heartbeat paused - user idle');
-        }
-      }
-    }, 30000); // 30 seconds
-
-    // Cleanup: stop heartbeat when tutorial changes or component unmounts
-    return () => {
-      clearInterval(heartbeatInterval);
-    };
-  }, [activeTutorialId, courseId, isUserActive]);
-
   // Derived state
   const completedSet = new Set(completedMaterials);
   const activeIndex = tutorials.findIndex((t) => t.tutorial_id === activeTutorialId);
@@ -257,7 +198,17 @@ export default function LearningPage() {
     : 0;
 
   function goToQuiz() {
-    router.push(`/dashboard/courses/learning/quiz?course=${courseId}`);
+    // Debug: Check journey data
+    console.log('🎯 goToQuiz called - Journey data:', journey);
+    console.log('🎯 exam_id value:', journey?.exam_id);
+    
+    // Validate exam_id exists
+    if (!journey?.exam_id) {
+      alert(`⚠️ Journey ini belum memiliki ujian yang dikonfigurasi.\n\nJourney ID: ${courseId}\nexam_id: ${journey?.exam_id || 'NULL'}\n\nSilakan hubungi admin.`);
+      return;
+    }
+    
+    router.push(`/dashboard/courses/learning/quiz?course=${courseId}&examId=${journey.exam_id}`);
   }
 
   function markCurrentAsComplete() {
@@ -283,14 +234,17 @@ export default function LearningPage() {
 
     markCurrentAsComplete();
 
+    // Update user summary after completing tutorial
+    updateUserSummary().catch(err => {
+      console.warn('Failed to update summary:', err);
+      // Don't block navigation if summary update fails
+    });
+
     if (activeIndex < tutorials.length - 1) {
       const nextId = tutorials[activeIndex + 1].tutorial_id;
       setActiveTutorialId(nextId);
     } else {
-      // Check if this is the last item, maybe go to quiz?
-      // For now, just stay or show completion message
-      // If there's a specific exam ID logic, it needs to be adapted
-      // Assuming no specific exam ID for now unless backend provides it
+      // Last tutorial - navigate to quiz
       goToQuiz(); 
     }
   }
@@ -450,6 +404,11 @@ export default function LearningPage() {
                       onClick={() => {
                         markCurrentAsComplete();
                         setActiveTutorialId(tutorial.tutorial_id);
+                        
+                        // Update summary when switching tutorials
+                        updateUserSummary().catch(err => {
+                          console.warn('Failed to update summary:', err);
+                        });
                       }}
                       className={`${baseClasses} ${bgColor} ${
                         !canClick
@@ -468,15 +427,23 @@ export default function LearningPage() {
                 })}
               </div>
               
-              {/* Exam Panel - Always show for now, will check journey.exam_id later */}
-              {journey && (
+              {/* Exam Panel - Show exam with dynamic title from Supabase */}
+              {journey && journey.exam_id && (
                 <div className="mt-6 pt-6 border-t border-gray-300">
                   <h4 className={`${quicksand.className} text-sm font-semibold text-black mb-3`}>Ujian Akhir</h4>
                   <button
                     type="button"
                     onClick={() => {
-                      const examId = journey.exam_id || 1; // Default to 1 if no exam_id
-                      router.push(`/dashboard/courses/learning/quiz?course=${courseId}&examId=${examId}`);
+                      // Mark current tutorial as complete before going to quiz
+                      markCurrentAsComplete();
+                      
+                      // Validate exam_id exists
+                      if (!journey.exam_id) {
+                        alert('⚠️ Journey ini belum memiliki ujian yang dikonfigurasi. Silakan hubungi admin.');
+                        return;
+                      }
+                      
+                      router.push(`/dashboard/courses/learning/quiz?course=${courseId}&examId=${journey.exam_id}`);
                     }}
                     className="flex items-center justify-between px-4 py-4 rounded-lg border-2 border-[#FFA500] bg-gradient-to-r from-[#FFF4E6] to-[#FFE4B5] text-black hover:shadow-md transition-all w-full text-left group"
                   >
@@ -487,7 +454,7 @@ export default function LearningPage() {
                         </svg>
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-sm">Ujian Akhir</p>
+                        <p className="font-semibold text-sm">{journey.exam_title || 'Ujian Akhir'}</p>
                         <p className="text-xs text-gray-700 mt-0.5">Uji pemahaman Anda</p>
                       </div>
                     </div>
