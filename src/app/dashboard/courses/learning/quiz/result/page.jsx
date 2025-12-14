@@ -21,7 +21,7 @@ export default function QuizResultPage() {
   const searchParams = useSearchParams();
   
   const courseId = searchParams.get("course");
-  const examId = searchParams.get("examId") || 1;
+  const examId = searchParams.get("examId"); // No default fallback!
   
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -81,7 +81,7 @@ export default function QuizResultPage() {
     );
   }
 
-  const isPassed = result.is_passed;
+  const isPassed = result.passed; // Use 'passed' from API response
   const scorePercentage = result.score;
   const passingScore = result.passing_score || 75;
 

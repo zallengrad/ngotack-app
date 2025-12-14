@@ -20,7 +20,7 @@ export default function QuizWorkPage() {
   const searchParams = useSearchParams();
 
   const courseId = searchParams.get("course");
-  const examId = searchParams.get("examId") || 1;
+  const examId = searchParams.get("examId"); // No default fallback!
 
   // Exam data from backend
   const [examData, setExamData] = useState(null);
@@ -73,6 +73,11 @@ export default function QuizWorkPage() {
           // Set timer from backend (remaining_seconds or duration_seconds)
           const duration = exam.remaining_seconds || exam.duration_seconds || 600;
           setTimeLeft(duration);
+          
+          // Save start time for duration calculation
+          const startTime = new Date().toISOString();
+          localStorage.setItem(`exam-${examId}-start-time`, startTime);
+          console.log('⏰ Exam start time saved:', startTime);
           
           // Mark as successfully fetched
           hasFetchedRef.current = true;

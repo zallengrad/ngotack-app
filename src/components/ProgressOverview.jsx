@@ -66,7 +66,11 @@ export default function ProgressOverview({
   insightText = defaultInsightText,
   activities = defaultActivities,
   completedClasses = defaultCompleted,
+  inProgressJourneys = null, // New prop for in-progress journeys
 }) {
+  // Use inProgressJourneys if available, otherwise fallback to activities
+  const displayActivities = inProgressJourneys || activities;
+  
   return (
     <section className="space-y-10">
       {/* Top row: AI Insights + Aktivitas */}
@@ -84,15 +88,15 @@ export default function ProgressOverview({
           </div>
         </div>
 
-        {/* Aktivitas Belajar */}
+        {/* Aktivitas Belajar - Show in-progress journeys */}
         <div className="bg-white border border-gray-300 rounded-xl shadow-sm">
           <div className="px-5 py-4 flex items-center gap-2 border-b border-gray-200">
             <FiBookmark className="text-lg text-gray-800" />
             <span className={`${montserrat.className} text-lg font-semibold text-gray-800`}>Aktivitas Belajar</span>
           </div>
           <div className="p-4 space-y-3 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-            {activities.map((item, idx) => (
-              <ActivityCard key={`${item.title}-${idx}`} {...item} />
+            {displayActivities.map((item, idx) => (
+              <ActivityCard key={`${item.title}-${idx}`} {...item} status={item.status || "Sedang dipelajari"} timeAgo={item.timeAgo || "Baru saja"} />
             ))}
           </div>
         </div>
